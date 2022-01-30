@@ -1,0 +1,17 @@
+{
+  "name": "fonbet-basketball",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start:dev": "nodemon index.js --time 0.5",
+    "start": "node index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^0.25.0",
+    "exceljs": "^4.3.0"
+  }
+}
