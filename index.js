@@ -128,10 +128,29 @@ const getArg = (name, defValue = true) => {
  */
 const getTime = (event) => {
     const unix_seconds = Math.round(+new Date()/1000);
-    const start = event.miscs.timerUpdateTimestampMsec/1000;
-    const minutes = (Math.round((unix_seconds - start)/60) % 60)-1;
-    const seconds = (unix_seconds - start) % 60;
-    return ((minutes.toString().length < 2) ? "0"+minutes.toString() : minutes.toString()) + ":" + ((seconds.toString().length < 2) ? "0"+seconds.toString() : seconds.toString());
+    const start = (event.miscs.timerUpdateTimestampMsec) ? event.miscs.timerUpdateTimestampMsec / 1000 : event.startTime;
+    const minutes = (Math.round((unix_seconds - start)/60) % 60).toString();
+    const seconds = ((unix_seconds - start) % 60).toString();
+    return ((minutes.length < 2) ? "0"+minutes : minutes) + ":" + ((seconds.length < 2) ? "0"+seconds : seconds);
+}
+
+/**
+ * Получение итогов мероприятия
+ * @param {object} event 
+ */
+const getScores = (event) => {
+    const regex = /(\d+-\d+)/gs;
+    const comment = event.miscs.comment;
+    const scores = [];
+    while ((m = regex.exec(comment)) !== null) {
+        if (m.index === regex.lastIndex) {
+            regex.lastIndex++;
+        }
+        m.forEach((match) => {
+            scores.push(match);
+        });
+    }
+    return scores;
 }
 
 /**
@@ -196,21 +215,21 @@ const getNeedleFactors = (factors) => {
  * @param {object} event 
  * @returns {object}
  */
-const getQuaters = (event) => {
-    const getQuater = (number) => {
+const getquarters = (event) => {
+    const getquarter = (number) => {
         return event.childs.filter(i => i.name === `${number}-я четверть`).pop();
     }
 
-    const quater_1 = getQuater(1);
-    const quater_2 = getQuater(2);
-    const quater_3 = getQuater(3);
-    const quater_4 = getQuater(4);
+    const quarter_1 = getquarter(1);
+    const quarter_2 = getquarter(2);
+    const quarter_3 = getquarter(3);
+    const quarter_4 = getquarter(4);
 
     return {
-        quater_1: (quater_1) ? getNeedleFactors(quater_1.factors) : null,
-        quater_2: (quater_2) ? getNeedleFactors(quater_2.factors) : null,
-        quater_3: (quater_3) ? getNeedleFactors(quater_3.factors) : null,
-        quater_4: (quater_4) ? getNeedleFactors(quater_4.factors) : null,
+        quarter_1: (quarter_1) ? getNeedleFactors(quarter_1.factors) : null,
+        quarter_2: (quarter_2) ? getNeedleFactors(quarter_2.factors) : null,
+        quarter_3: (quarter_3) ? getNeedleFactors(quarter_3.factors) : null,
+        quarter_4: (quarter_4) ? getNeedleFactors(quarter_4.factors) : null,
     }
 }
 
@@ -291,22 +310,33 @@ const update = async(pathResult) => {
             // Получаем название матча
             const name = `${child_event.team1} - ${child_event.team2}`;
             // Получаем четверти
-            const quaters = getQuaters(child_event);
+            const quarters = getquarters(child_event);
 
             // Получаем строчку таблицы, отвечающую за текущее мероприятие
             const eventRow = sheet.getRow(association.rowIndex);
             let values = {
                 time,
                 name
-            };
+            };  
+
+            // Получаем итоги четвертей
+            let result_scores = getScores(child_event);
 
             // Цикл заполнения информации о четвертях
             for (let i = 1; i < 4; i++) {
-                if (quaters[`quater_${i}`] && !association[`quater_${i}`]) {
-                    association[`quater_${i}`] = true;
-                    association[`total_${i}`] = quaters[`quater_${i}`].total;
-                    association[`total_${i}_more`] = quaters[`quater_${i}`].total_more;
-                    association[`total_${i}_less`] = quaters[`quater_${i}`].total_less;
+                if (quarters[`quarter_${i}`] && !association[`quarter_${i}_writed`]) {
+                    association[`quarter_${i}_writed`] = true;
+
+                    association[`total_${i}`] = quarters[`quarter_${i}`].total;
+                    association[`total_${i}_more`] = quarters[`quarter_${i}`].total_more;
+                    association[`total_${i}_less`] = quarters[`quarter_${i}`].total_less;
+
+                    association.update();
+                }
+
+                // Записываем итоги игры после окончания четвертей
+                if (result_scores[i-1] && i > 1) {
+                    association[`quarter_${i-1}`] = result_scores[i-1];
                     association.update();
                 }
                 
@@ -316,7 +346,14 @@ const update = async(pathResult) => {
                     values[`ratio_${i}_more`] = association[`total_${i}_more`];
                 if (association[`total_${i}_less`])
                     values[`ratio_${i}_less`] = association[`total_${i}_less`];
+                if (association[`quarter_${i-1}`])
+                    values[`quarter_${i-1}`] = association[`quarter_${i-1}`];
             }
+
+            // Итог игры
+            if (result_scores[5])
+                values[`score_end`] = result_scores[5];
+
             eventRow.values = values;
         }
     }
